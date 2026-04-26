@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fed Weather — 2022</title>
+<title>Fed Weather</title>
 <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin:0; padding:0; box-sizing:border-box; }
   body {
-    background: #0a0a14;
+    background: #08080f;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -16,7 +16,59 @@
     min-height: 100vh;
     font-family: 'Courier Prime', monospace;
     color: #fff;
+    padding: 16px 0 24px;
   }
+
+  /* ── YEAR PICKER ── */
+  #picker {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    background: #12121e;
+    border: 1px solid #2a2a40;
+    border-radius: 8px;
+    padding: 10px 20px;
+  }
+  #picker label {
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+    color: #778;
+    text-transform: uppercase;
+  }
+  #yearInput {
+    background: #0a0a16;
+    border: 1px solid #3a3a60;
+    border-radius: 5px;
+    color: #80c8ff;
+    font-family: 'Courier Prime', monospace;
+    font-size: 1rem;
+    font-weight: 700;
+    padding: 5px 12px;
+    width: 80px;
+    text-align: center;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #yearInput:focus { border-color: #50c8ff; }
+  #goBtn {
+    background: #1a3a5a;
+    border: 1px solid #3060a0;
+    border-radius: 5px;
+    color: #80c8ff;
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 6px 18px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  #goBtn:hover { background: #204a70; border-color: #50c8ff; }
+  #goBtn:disabled { opacity: 0.4; cursor: default; }
+  #yearMsg { font-size: 0.78rem; color: #556; min-width: 140px; }
+
+  /* ── CANVAS WRAPPER ── */
   #wrapper {
     position: relative;
     width: 1100px;
@@ -26,71 +78,96 @@
     display: block;
     width: 100%;
     border-radius: 6px;
-    box-shadow: 0 8px 60px rgba(0,0,0,0.8);
+    box-shadow: 0 8px 60px rgba(0,0,0,0.85);
   }
-  #loading {
+  #overlay {
     position: absolute;
     inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: rgba(10,10,20,0.92);
+    background: rgba(8,8,16,0.88);
     border-radius: 6px;
-    gap: 18px;
+    gap: 16px;
     z-index: 10;
+    transition: opacity 0.4s;
   }
-  #loading h2 {
+  #overlay h2 {
     font-family: 'Playfair Display', serif;
-    font-size: 1.5rem;
-    letter-spacing: 0.15em;
+    font-size: 1.6rem;
+    letter-spacing: 0.18em;
     color: #b0d0ff;
   }
-  #loading p { font-size: 0.85rem; color: #778; }
+  #overlay p { font-size: 0.82rem; color: #556; }
   .spinner {
-    width: 36px; height: 36px;
-    border: 3px solid #223;
-    border-top-color: #80c8ff;
+    width: 34px; height: 34px;
+    border: 3px solid #1a1a2e;
+    border-top-color: #50c8ff;
     border-radius: 50%;
-    animation: spin 0.9s linear infinite;
+    animation: spin 0.85s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+  #errMsg { color: #f08080; font-size: 0.82rem; display:none; }
+
   #footer {
     margin-top: 10px;
-    font-size: 0.72rem;
-    color: #445;
+    font-size: 0.7rem;
+    color: #333;
     letter-spacing: 0.08em;
     text-align: center;
   }
 </style>
 </head>
 <body>
+
+<div id="picker">
+  <label>Year</label>
+  <input id="yearInput" type="number" value="2022" min="1960" max="2024" step="1">
+  <button id="goBtn">▶ LOAD</button>
+  <span id="yearMsg">Enter a year and hit Load</span>
+</div>
+
 <div id="wrapper">
   <canvas id="c" width="1100" height="700"></canvas>
-  <div id="loading">
-    <div class="spinner"></div>
+  <div id="overlay">
     <h2>FED WEATHER</h2>
-    <p>Fetching FRED data…</p>
+    <p>Choose a year above and press Load</p>
+    <span id="errMsg"></span>
   </div>
 </div>
+
 <div id="footer">
-  Federal Reserve Economic Data &nbsp;•&nbsp; FRED API &nbsp;•&nbsp; Weekly Playback 2022 &nbsp;•&nbsp;
-  SPACE: pause &nbsp; R: restart &nbsp; drag scrubber
+  Federal Reserve Economic Data &nbsp;•&nbsp; FRED API &nbsp;•&nbsp;
+  SPACE: pause &nbsp;|&nbsp; R: restart &nbsp;|&nbsp; drag scrubber to scrub
 </div>
 
 <script>
-// ── CONFIG ────────────────────────────────────────────────────────────────────
-const FRED_KEY   = 'f85ef9355e7d1090d7f17f6870752002';
-const FRED_BASE  = 'https://api.stlouisfed.org/fred/series/observations';
-const W = 1100, H = 700, SCRUB_H = 60, SCENE_H = H - SCRUB_H;
-const HIKE_WEEKS = new Set([6, 19, 23, 27, 32, 36, 41]);
+'use strict';
 
-// ── FRED FETCH ────────────────────────────────────────────────────────────────
-async function fetchSeries(seriesId) {
-  const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_KEY}` +
-    `&file_type=json&observation_start=2021-12-01&observation_end=2022-12-31`;
-  const r = await fetch(url);
-  const data = await r.json();
+// ── CONSTANTS ────────────────────────────────────────────────────────────────
+const FRED_KEY  = 'f85ef9355e7d1090d7f17f6870752002';
+const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations';
+const W = 1100, H = 700, SCRUB_H = 60, SCENE_H = H - SCRUB_H;
+const HIKE_WEEKS = {
+  2022: new Set([6,19,23,27,32,36,41]),
+  2023: new Set([3,7,11,15,19]),
+  2018: new Set([7,18,30,44]),
+  2015: new Set([50]),
+};
+
+// ── FRED ──────────────────────────────────────────────────────────────────────
+async function fetchSeries(seriesId, year) {
+  const start = `${year-1}-10-01`;
+  const end   = `${year}-12-31`;
+  const fredUrl = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_KEY}` +
+                  `&file_type=json&observation_start=${start}&observation_end=${end}`;
+  // Route through CORS proxy so it works from GitHub Pages
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fredUrl)}`;
+  const r = await fetch(proxyUrl);
+  if (!r.ok) throw new Error(`FRED ${seriesId}: HTTP ${r.status}`);
+  const wrapper = await r.json();
+  const data = JSON.parse(wrapper.contents);
   const out = {};
   for (const obs of data.observations || []) {
     if (obs.value !== '.') out[obs.date] = parseFloat(obs.value);
@@ -98,730 +175,523 @@ async function fetchSeries(seriesId) {
   return out;
 }
 
-function normalize(arr, lo, hi) {
-  const mn = lo ?? Math.min(...arr), mx = hi ?? Math.max(...arr);
-  const rng = mx - mn || 1;
-  return arr.map(v => Math.max(0, Math.min(1, (v - mn) / rng)));
+// ── DATA HELPERS ──────────────────────────────────────────────────────────────
+function buildWeeks(year) {
+  const weeks = [];
+  let d = new Date(`${year}-01-01`);
+  const end = new Date(`${year}-12-31`);
+  while (d <= end) { weeks.push(new Date(d)); d.setDate(d.getDate()+7); }
+  return weeks;
 }
 
-function buildWeekly(monthlyMap) {
-  const weeks = [];
-  let d = new Date('2022-01-01');
-  const end = new Date('2022-12-31');
-  while (d <= end) { weeks.push(new Date(d)); d.setDate(d.getDate() + 7); }
-
-  const sorted = Object.entries(monthlyMap).sort(([a],[b]) => a < b ? -1 : 1);
+function forwardFill(monthlyMap, weeks) {
+  const sorted = Object.entries(monthlyMap).sort(([a],[b])=>a<b?-1:1);
   return weeks.map(w => {
     let val = null;
-    for (const [ds, v] of sorted) {
-      if (new Date(ds) <= w) val = v; else break;
-    }
+    for (const [ds,v] of sorted) { if (new Date(ds)<=w) val=v; else break; }
     return val ?? (sorted[0]?.[1] ?? 0);
   });
 }
 
-function buildYoYCPI(monthlyMap) {
-  const sorted = Object.entries(monthlyMap).sort(([a],[b]) => a < b ? -1 : 1);
+function buildYoYCPI(monthlyMap, weeks) {
+  const sorted = Object.entries(monthlyMap).sort(([a],[b])=>a<b?-1:1);
   const yoy = {};
-  for (let i = 12; i < sorted.length; i++) {
-    const pct = (sorted[i][1] - sorted[i-12][1]) / sorted[i-12][1] * 100;
-    yoy[sorted[i][0]] = pct;
+  for (let i=12; i<sorted.length; i++) {
+    yoy[sorted[i][0]] = (sorted[i][1]-sorted[i-12][1])/sorted[i-12][1]*100;
   }
-  // forward-fill into weeks
-  const weeks = [];
-  let d = new Date('2022-01-01');
-  const end = new Date('2022-12-31');
-  while (d <= end) { weeks.push(new Date(d)); d.setDate(d.getDate() + 7); }
-  const ySorted = Object.entries(yoy).sort(([a],[b]) => a < b ? -1 : 1);
+  const ySorted = Object.entries(yoy).sort(([a],[b])=>a<b?-1:1);
   return weeks.map(w => {
     let val = null;
-    for (const [ds, v] of ySorted) {
-      if (new Date(ds) <= w) val = v; else break;
-    }
-    return val ?? 7.0;
+    for (const [ds,v] of ySorted) { if (new Date(ds)<=w) val=v; else break; }
+    return val ?? 3.0;
   });
 }
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-const rnd = (a, b) => a + Math.random() * (b - a);
-const rndInt = (a, b) => Math.floor(rnd(a, b + 1));
-const clamp = (v, lo=0, hi=255) => Math.max(lo, Math.min(hi, v));
-const lerp = (a, b, t) => a + (b - a) * t;
-const blendRGB = (a, b, t) => [
-  clamp(Math.round(lerp(a[0], b[0], t))),
-  clamp(Math.round(lerp(a[1], b[1], t))),
-  clamp(Math.round(lerp(a[2], b[2], t))),
-];
-const rgb = ([r,g,b]) => `rgb(${r},${g},${b})`;
-const rgba = ([r,g,b], a) => `rgba(${r},${g},${b},${a})`;
+function normalize(arr, lo, hi) {
+  const mn = lo??Math.min(...arr), mx = hi??Math.max(...arr);
+  const rng = mx-mn||1;
+  return arr.map(v => Math.max(0,Math.min(1,(v-mn)/rng)));
+}
+
+// ── MATH UTILS ────────────────────────────────────────────────────────────────
+const rnd    = (a,b) => a+Math.random()*(b-a);
+const rndInt = (a,b) => Math.floor(rnd(a,b+1));
+const clamp  = (v,lo=0,hi=255) => Math.max(lo,Math.min(hi,v));
+const lerp   = (a,b,t) => a+(b-a)*t;
+const blendRGB = (a,b,t) => a.map((_,i)=>clamp(Math.round(lerp(a[i],b[i],t))));
+const rgb    = ([r,g,b]) => `rgb(${r},${g},${b})`;
 
 // ── PARTICLES ─────────────────────────────────────────────────────────────────
 class RainDrop {
   constructor(intensity, cloudDark) {
-    this.x = rnd(0, W);
-    this.y = rnd(40, SCENE_H / 3);
-    this.speed  = rnd(5, 10) * (0.5 + intensity * 0.6);
-    this.length = rndInt(8, 18);
-    const d = cloudDark;
-    this.r = clamp(100 - d * 60);
-    this.g = clamp(120 - d * 60);
-    this.b = clamp(160 - d * 40);
+    this.x = rnd(0,W);
+    this.y = rnd(40, SCENE_H/3);
+    this.speed  = rnd(5,10)*(0.5+intensity*0.6);
+    this.length = rndInt(8,18);
+    this.r = clamp(100-cloudDark*60);
+    this.g = clamp(120-cloudDark*60);
+    this.b = clamp(160-cloudDark*40);
   }
-  update(wind) {
-    this.x += wind * 0.2;
-    this.y += this.speed;
-    return this.y < SCENE_H;
-  }
+  update(wind) { this.x+=wind*0.2; this.y+=this.speed; return this.y<SCENE_H; }
   draw(ctx) {
     ctx.beginPath();
-    ctx.strokeStyle = `rgb(${this.r},${this.g},${this.b})`;
-    ctx.lineWidth = 1;
-    ctx.moveTo(this.x, this.y);
-    ctx.lineTo(this.x + 1, this.y + this.length);
+    ctx.strokeStyle=`rgb(${this.r},${this.g},${this.b})`;
+    ctx.lineWidth=1;
+    ctx.moveTo(this.x,this.y);
+    ctx.lineTo(this.x+1,this.y+this.length);
     ctx.stroke();
   }
 }
 
 class WindParticle {
   constructor(speed) {
-    this.x = rnd(-100, 0);
-    this.y = rnd(SCENE_H / 3, SCENE_H - 80);
-    this.spd  = rnd(2, 6) * (0.3 + speed * 2);
-    this.w    = rndInt(1, 3);
-    this.life = 1.0;
-    this.decay = rnd(0.005, 0.02);
+    this.x=rnd(-100,0); this.y=rnd(SCENE_H/3,SCENE_H-80);
+    this.spd=rnd(2,6)*(0.3+speed*2);
+    this.life=1.0; this.decay=rnd(0.005,0.02);
   }
-  update() {
-    this.x += this.spd;
-    this.life -= this.decay;
-    return this.x < W + 20 && this.life > 0;
-  }
+  update() { this.x+=this.spd; this.life-=this.decay; return this.x<W+20&&this.life>0; }
   draw(ctx) {
     ctx.beginPath();
-    ctx.strokeStyle = `rgba(180,180,180,${this.life * 0.6})`;
-    ctx.lineWidth = 1;
-    ctx.moveTo(this.x, this.y);
-    ctx.lineTo(this.x + this.w * 4, this.y);
+    ctx.strokeStyle=`rgba(180,180,180,${this.life*0.6})`;
+    ctx.lineWidth=1;
+    ctx.moveTo(this.x,this.y); ctx.lineTo(this.x+12,this.y);
     ctx.stroke();
   }
 }
 
 class Lightning {
   constructor() {
-    this.x0 = rndInt(100, W - 100);
-    this.y0 = rndInt(40, 150);
-    this.segs = this._gen();
-    this.life  = 1.0;
-    this.decay = rnd(0.06, 0.14);
-    this.width = rndInt(2, 4);
+    this.x0=rndInt(100,W-100); this.y0=rndInt(40,150);
+    this.segs=this._gen();
+    this.life=1.0; this.decay=rnd(0.06,0.14); this.width=rndInt(2,4);
   }
   _gen() {
-    const segs = [];
-    let x = this.x0, y = this.y0;
-    const targetY = SCENE_H * rnd(0.45, 0.75);
-    while (y < targetY) {
-      const nx = x + rndInt(-40, 40), ny = y + rndInt(18, 35);
-      segs.push([x, y, nx, ny]);
-      x = nx; y = Math.min(ny, targetY);
-      if (Math.random() < 0.3) {
-        let bx = x, by = y;
-        for (let i = 0; i < rndInt(2, 4); i++) {
-          const nbx = bx + rndInt(-30, 30), nby = by + rndInt(12, 25);
-          segs.push([bx, by, nbx, nby]);
-          bx = nbx; by = nby;
+    const segs=[];
+    let x=this.x0,y=this.y0;
+    const ty=SCENE_H*rnd(0.45,0.75);
+    while(y<ty){
+      const nx=x+rndInt(-40,40),ny=y+rndInt(18,35);
+      segs.push([x,y,nx,ny]); x=nx; y=Math.min(ny,ty);
+      if(Math.random()<0.3){
+        let bx=x,by=y;
+        for(let i=0;i<rndInt(2,4);i++){
+          const nbx=bx+rndInt(-30,30),nby=by+rndInt(12,25);
+          segs.push([bx,by,nbx,nby]); bx=nbx; by=nby;
         }
       }
     }
     return segs;
   }
-  update() { this.life -= this.decay; return this.life > 0; }
-  draw(ctx) {
-    const a = this.life;
-    const wb = Math.max(1, Math.round(this.width * a));
-    // glow
-    ctx.beginPath();
-    ctx.strokeStyle = `rgba(180,180,255,${a * 0.4})`;
-    ctx.lineWidth = wb + 3;
-    for (const [x1,y1,x2,y2] of this.segs) {
-      ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-    }
+  update(){ this.life-=this.decay; return this.life>0; }
+  draw(ctx){
+    const a=this.life, wb=Math.max(1,Math.round(this.width*a));
+    ctx.beginPath(); ctx.strokeStyle=`rgba(180,180,255,${a*0.4})`; ctx.lineWidth=wb+3;
+    for(const [x1,y1,x2,y2] of this.segs){ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);}
     ctx.stroke();
-    // core
-    const yellow = clamp(Math.round(180 + 75 * a));
-    ctx.beginPath();
-    ctx.strokeStyle = `rgba(255,255,${yellow},${a})`;
-    ctx.lineWidth = wb;
-    for (const [x1,y1,x2,y2] of this.segs) {
-      ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-    }
+    ctx.beginPath(); ctx.strokeStyle=`rgba(255,255,${clamp(Math.round(180+75*a))},${a})`; ctx.lineWidth=wb;
+    for(const [x1,y1,x2,y2] of this.segs){ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);}
     ctx.stroke();
   }
 }
 
 class Cloud {
-  constructor(x, y, scale, darkness) {
-    this.x = x; this.y = y;
-    this.scale = scale;
-    this.darkness = darkness;
-    this.drift = rnd(-0.3, 0.3);
-    this.puffs = [
-      [0, 0, Math.round(55 * scale)],
-      [-50, 12, Math.round(42 * scale)],
-      [50, 12, Math.round(42 * scale)],
-      [-25, -18, Math.round(38 * scale)],
-      [25, -18, Math.round(38 * scale)],
+  constructor(x,y,scale,darkness){
+    this.x=x; this.y=y; this.scale=scale; this.darkness=darkness;
+    this.drift=rnd(-0.3,0.3);
+    this.puffs=[
+      [0,0,Math.round(55*scale)],[-50,12,Math.round(42*scale)],[50,12,Math.round(42*scale)],
+      [-25,-18,Math.round(38*scale)],[25,-18,Math.round(38*scale)],
     ];
   }
-  update(wind) {
-    this.x += this.drift + wind * 0.08;
-    if (this.x > W + 200) this.x = -200;
-    else if (this.x < -200) this.x = W + 200;
+  update(wind){
+    this.x+=this.drift+wind*0.08;
+    if(this.x>W+200) this.x=-200;
+    else if(this.x<-200) this.x=W+200;
   }
-  draw(ctx) {
-    const d = this.darkness;
-    const cr = clamp(220 - d * 190);
-    const cg = clamp(220 - d * 175);
-    const cb = clamp(225 - d * 160);
-    const shadow = `rgba(${clamp(cr-35)},${clamp(cg-35)},${clamp(cb-30)},0.6)`;
-    const fill   = `rgb(${cr},${cg},${cb})`;
-    for (const [ox, oy, r] of this.puffs) {
-      ctx.beginPath();
-      ctx.fillStyle = shadow;
-      ctx.arc(this.x + ox + 5, this.y + oy + 7, r, 0, Math.PI * 2);
-      ctx.fill();
+  draw(ctx){
+    const d=this.darkness;
+    const cr=clamp(220-d*190),cg=clamp(220-d*175),cb=clamp(225-d*160);
+    for(const [ox,oy,r] of this.puffs){
+      ctx.beginPath(); ctx.fillStyle=`rgba(${clamp(cr-35)},${clamp(cg-35)},${clamp(cb-30)},0.55)`;
+      ctx.arc(this.x+ox+5,this.y+oy+7,r,0,Math.PI*2); ctx.fill();
     }
-    for (const [ox, oy, r] of this.puffs) {
-      ctx.beginPath();
-      ctx.fillStyle = fill;
-      ctx.arc(this.x + ox, this.y + oy, r, 0, Math.PI * 2);
-      ctx.fill();
+    for(const [ox,oy,r] of this.puffs){
+      ctx.beginPath(); ctx.fillStyle=`rgb(${cr},${cg},${cb})`;
+      ctx.arc(this.x+ox,this.y+oy,r,0,Math.PI*2); ctx.fill();
     }
-    // storm underbelly
-    if (d > 0.5) {
-      const br = clamp(cr - 60), bg = clamp(cg - 60), bb = clamp(cb - 50);
-      const bx = this.x - this.puffs[1][2];
-      const bw = this.puffs[2][2] * 2 + this.puffs[0][2];
-      const bh = Math.round(this.puffs[0][2] * 0.4 * d);
-      const by = this.y + this.puffs[0][2] * 0.6;
-      if (bw > 0 && bh > 0) {
-        ctx.beginPath();
-        ctx.fillStyle = `rgb(${br},${bg},${bb})`;
-        ctx.ellipse(bx + bw/2, by + bh/2, bw/2, bh/2, 0, 0, Math.PI*2);
-        ctx.fill();
+    if(d>0.5){
+      const br=clamp(cr-60),bg=clamp(cg-60),bb=clamp(cb-50);
+      const bx=this.x-this.puffs[1][2];
+      const bw=this.puffs[2][2]*2+this.puffs[0][2];
+      const bh=Math.round(this.puffs[0][2]*0.4*d);
+      const by=this.y+this.puffs[0][2]*0.6;
+      if(bw>0&&bh>0){
+        ctx.beginPath(); ctx.fillStyle=`rgb(${br},${bg},${bb})`;
+        ctx.ellipse(bx+bw/2,by+bh/2,bw/2,bh/2,0,0,Math.PI*2); ctx.fill();
       }
     }
   }
 }
 
 class SunRay {
-  constructor(angle, len) {
-    this.angle = angle;
-    this.len = len;
-    this.phase = rnd(0, Math.PI * 2);
-  }
-  draw(ctx, cx, cy, t, alpha) {
-    const flicker = 0.85 + 0.15 * Math.sin(t * 2 + this.phase);
-    const L = this.len * flicker;
-    const ex = cx + Math.cos(this.angle) * L;
-    const ey = cy + Math.sin(this.angle) * L;
-    ctx.beginPath();
-    ctx.strokeStyle = `rgba(255,220,80,${alpha * flicker * 0.7})`;
-    ctx.lineWidth = 2;
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(ex, ey);
+  constructor(angle,len){ this.angle=angle; this.len=len; this.phase=rnd(0,Math.PI*2); }
+  draw(ctx,cx,cy,t,alpha){
+    const f=0.85+0.15*Math.sin(t*2+this.phase);
+    ctx.beginPath(); ctx.strokeStyle=`rgba(255,220,80,${alpha*f*0.7})`; ctx.lineWidth=2;
+    ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+Math.cos(this.angle)*this.len*f, cy+Math.sin(this.angle)*this.len*f);
     ctx.stroke();
   }
 }
 
-// ── DRAW FUNCTIONS ────────────────────────────────────────────────────────────
-function drawSky(ctx, cloudDark, gdpN) {
-  const topCalm  = [180, 220, 255];
-  const botCalm  = [140, 180, 240];
-  const topStorm = [ 25,  10,  50];
-  const botStorm = [ 55,  20,  90];
-  const warmTint = [255, 220, 140];
-  const calmFactor = 1.0 - cloudDark;
-
-  let topCol = blendRGB(topCalm, topStorm, cloudDark);
-  let botCol = blendRGB(botCalm, botStorm, cloudDark);
-
-  const bright = 0.85 + gdpN * 0.18;
-  topCol = topCol.map(v => clamp(Math.round(v * bright)));
-  botCol = botCol.map(v => clamp(Math.round(v * bright)));
-
-  const warmS = calmFactor * gdpN * 0.25;
-  topCol = blendRGB(topCol, warmTint, warmS * 0.5);
-  botCol = blendRGB(botCol, warmTint, warmS);
-
-  const grad = ctx.createLinearGradient(0, 0, 0, SCENE_H);
-  grad.addColorStop(0, rgb(topCol));
-  grad.addColorStop(1, rgb(botCol));
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, SCENE_H);
+// ── DRAW HELPERS ──────────────────────────────────────────────────────────────
+function rrect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath(); ctx.fill();
 }
 
-function drawGround(ctx, tempN) {
-  const groundY = SCENE_H - 60;
-  const r = clamp(Math.round(40 + tempN * 60));
-  const g = clamp(Math.round(80 - tempN * 30));
-  ctx.fillStyle = `rgb(${r},${g},30)`;
-  ctx.fillRect(0, groundY, W, SCENE_H - groundY);
-  // grass
-  for (let i = 0; i < W; i += 12) {
-    const h = rndInt(5, 15);
-    const gr = clamp(Math.round(60 - tempN * 40));
-    const gg = clamp(Math.round(120 - tempN * 60));
+function drawSky(ctx,cloudDark,gdpN){
+  const topCalm=[180,220,255],botCalm=[140,180,240];
+  const topStorm=[25,10,50],botStorm=[55,20,90];
+  const warm=[255,220,140];
+  let top=blendRGB(topCalm,topStorm,cloudDark);
+  let bot=blendRGB(botCalm,botStorm,cloudDark);
+  const bright=0.85+gdpN*0.18;
+  top=top.map(v=>clamp(Math.round(v*bright)));
+  bot=bot.map(v=>clamp(Math.round(v*bright)));
+  const ws=(1-cloudDark)*gdpN*0.25;
+  top=blendRGB(top,warm,ws*0.5); bot=blendRGB(bot,warm,ws);
+  const g=ctx.createLinearGradient(0,0,0,SCENE_H);
+  g.addColorStop(0,rgb(top)); g.addColorStop(1,rgb(bot));
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,SCENE_H);
+}
+
+function drawGround(ctx,tempN){
+  const gy=SCENE_H-60;
+  ctx.fillStyle=`rgb(${clamp(Math.round(40+tempN*60))},${clamp(Math.round(80-tempN*30))},30)`;
+  ctx.fillRect(0,gy,W,SCENE_H-gy);
+  for(let i=0;i<W;i+=12){
+    const h=rndInt(5,15);
     ctx.beginPath();
-    ctx.strokeStyle = `rgb(${gr},${gg},20)`;
-    ctx.lineWidth = 1;
-    ctx.moveTo(i, groundY);
-    ctx.lineTo(i + rndInt(-3, 3), groundY - h);
-    ctx.stroke();
+    ctx.strokeStyle=`rgb(${clamp(Math.round(60-tempN*40))},${clamp(Math.round(120-tempN*60))},20)`;
+    ctx.lineWidth=1; ctx.moveTo(i,gy); ctx.lineTo(i+rndInt(-3,3),gy-h); ctx.stroke();
   }
 }
 
-function drawThermometer(ctx, tempN, actualCPI, x=60, y=120) {
-  const barH = 200, barW = 18, bx = x - barW/2;
-
-  // tube bg
-  ctx.fillStyle = '#32324a';
-  roundRect(ctx, bx-2, y-2, barW+4, barH+4, 10);
-  ctx.fillStyle = '#14141f';
-  roundRect(ctx, bx, y, barW, barH, 8);
-
-  // fill
-  const fillH = Math.round(barH * tempN);
-  const fillY = y + barH - fillH;
-  const cr = clamp(Math.round(lerp(60, 255, tempN)));
-  const cg = clamp(Math.round(lerp(120, 160, tempN)));
-  const cb = clamp(Math.round(lerp(220, 30, tempN)));
-  ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
-  roundRect(ctx, bx, fillY, barW, fillH, 8);
-
-  // bulb
-  ctx.beginPath();
-  ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
-  ctx.arc(x, y + barH + 16, 16, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.strokeStyle = '#14141f';
-  ctx.lineWidth = 2;
-  ctx.arc(x, y + barH + 16, 16, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // ticks
-  for (let i = 0; i <= 4; i++) {
-    const ty = y + Math.round(barH * (1 - i/4));
-    ctx.beginPath();
-    ctx.strokeStyle = '#aaa';
-    ctx.lineWidth = 1;
-    ctx.moveTo(bx - 5, ty); ctx.lineTo(bx, ty);
-    ctx.stroke();
+function drawThermometer(ctx,tempN,cpiV){
+  const x=60,y=120,bh=200,bw=18,bx=x-bw/2;
+  ctx.fillStyle='#32324a'; rrect(ctx,bx-2,y-2,bw+4,bh+4,10);
+  ctx.fillStyle='#14141f'; rrect(ctx,bx,y,bw,bh,8);
+  const fh=Math.round(bh*tempN),fy=y+bh-fh;
+  const cr=clamp(Math.round(lerp(60,255,tempN)));
+  const cg=clamp(Math.round(lerp(120,160,tempN)));
+  const cb=clamp(Math.round(lerp(220,30,tempN)));
+  ctx.fillStyle=`rgb(${cr},${cg},${cb})`; rrect(ctx,bx,fy,bw,fh,8);
+  ctx.beginPath(); ctx.fillStyle=`rgb(${cr},${cg},${cb})`; ctx.arc(x,y+bh+16,16,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.strokeStyle='#14141f'; ctx.lineWidth=2; ctx.arc(x,y+bh+16,16,0,Math.PI*2); ctx.stroke();
+  for(let i=0;i<=4;i++){
+    const ty=y+Math.round(bh*(1-i/4));
+    ctx.beginPath(); ctx.strokeStyle='#aaa'; ctx.lineWidth=1; ctx.moveTo(bx-5,ty); ctx.lineTo(bx,ty); ctx.stroke();
   }
-
-  // label — bold black
-  ctx.font = 'bold 14px "Courier Prime", monospace';
-  ctx.fillStyle = '#000';
-  const label = `CPI ${actualCPI.toFixed(1)}%`;
-  ctx.fillText(label, x - ctx.measureText(label).width/2, y - 12);
+  ctx.font='bold 14px "Courier Prime",monospace'; ctx.fillStyle='#000';
+  const lbl=`CPI ${cpiV.toFixed(1)}%`;
+  ctx.fillText(lbl,x-ctx.measureText(lbl).width/2,y-12);
 }
 
-function drawPressureGauge(ctx, rateN, actualRate, cx=1040, cy=200) {
-  const r = 55;
-  // arc bg
-  ctx.beginPath();
-  ctx.strokeStyle = '#32324a';
-  ctx.lineWidth = 8;
-  ctx.arc(cx, cy, r, Math.PI, 2*Math.PI);
-  ctx.stroke();
-
-  // coloured fill arc
-  const steps = 40;
-  for (let i = 0; i < steps; i++) {
-    const frac = i / steps;
-    if (frac > rateN) break;
-    const angle = Math.PI + frac * Math.PI;
-    const cr = clamp(Math.round(lerp(60, 255, frac)));
-    const cg = clamp(Math.round(lerp(120, 160, frac)));
-    const cb = clamp(Math.round(lerp(220, 30, frac)));
-    const x1 = cx + Math.cos(angle) * (r - 8);
-    const y1 = cy + Math.sin(angle) * (r - 8);
-    const x2 = cx + Math.cos(angle) * r;
-    const y2 = cy + Math.sin(angle) * r;
-    ctx.beginPath();
-    ctx.strokeStyle = `rgb(${cr},${cg},${cb})`;
-    ctx.lineWidth = 4;
-    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-    ctx.stroke();
+function drawGauge(ctx,rateN,rateV){
+  const cx=1040,cy=200,r=55;
+  ctx.beginPath(); ctx.strokeStyle='#32324a'; ctx.lineWidth=8;
+  ctx.arc(cx,cy,r,Math.PI,2*Math.PI); ctx.stroke();
+  for(let i=0;i<40;i++){
+    const f=i/40; if(f>rateN) break;
+    const a=Math.PI+f*Math.PI;
+    const cr=clamp(Math.round(lerp(60,255,f)));
+    const cg=clamp(Math.round(lerp(120,160,f)));
+    const cb=clamp(Math.round(lerp(220,30,f)));
+    ctx.beginPath(); ctx.strokeStyle=`rgb(${cr},${cg},${cb})`; ctx.lineWidth=4;
+    ctx.moveTo(cx+Math.cos(a)*(r-8),cy+Math.sin(a)*(r-8));
+    ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r); ctx.stroke();
   }
-
-  // needle
-  const na = Math.PI + rateN * Math.PI;
-  ctx.beginPath();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.moveTo(cx, cy);
-  ctx.lineTo(cx + Math.cos(na) * (r-12), cy + Math.sin(na) * (r-12));
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.fillStyle = '#aaa';
-  ctx.arc(cx, cy, 5, 0, Math.PI*2);
-  ctx.fill();
-
-  // labels — bold black
-  ctx.font = 'bold 14px "Courier Prime", monospace';
-  ctx.fillStyle = '#000';
-  const lbl = `Rate ${actualRate.toFixed(2)}%`;
-  ctx.fillText(lbl, cx - ctx.measureText(lbl).width/2, cy + 18);
-  ctx.font = 'bold 12px "Courier Prime", monospace';
-  ctx.fillStyle = '#000';
-  const title = 'PRESSURE';
-  ctx.fillText(title, cx - ctx.measureText(title).width/2, cy - r - 12);
+  const na=Math.PI+rateN*Math.PI;
+  ctx.beginPath(); ctx.strokeStyle='#fff'; ctx.lineWidth=2;
+  ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(na)*(r-12),cy+Math.sin(na)*(r-12)); ctx.stroke();
+  ctx.beginPath(); ctx.fillStyle='#aaa'; ctx.arc(cx,cy,5,0,Math.PI*2); ctx.fill();
+  ctx.font='bold 14px "Courier Prime",monospace'; ctx.fillStyle='#000';
+  const lbl=`Rate ${rateV.toFixed(2)}%`;
+  ctx.fillText(lbl,cx-ctx.measureText(lbl).width/2,cy+18);
+  ctx.font='bold 12px "Courier Prime",monospace'; ctx.fillStyle='#000';
+  const title='PRESSURE';
+  ctx.fillText(title,cx-ctx.measureText(title).width/2,cy-r-12);
 }
 
-function drawTitle(ctx) {
-  ctx.font = 'bold 26px "Playfair Display", serif';
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  const title = 'FED WEATHER  2022';
-  const tx = W/2 - ctx.measureText(title).width/2;
-  ctx.fillText(title, tx+2, 36);
-  ctx.fillStyle = '#fff';
-  ctx.fillText(title, tx, 34);
-
-  ctx.font = '12px "Courier Prime", monospace';
-  ctx.fillStyle = 'rgba(220,220,220,0.85)';
-  const sub = 'U.S. Federal Reserve Economic Data  •  FRED API  •  Weekly Playback';
-  ctx.fillText(sub, W/2 - ctx.measureText(sub).width/2, 54);
+function drawTitle(ctx,year){
+  const title=`FED WEATHER  ${year}`;
+  ctx.font='bold 26px "Playfair Display",serif';
+  ctx.fillStyle='rgba(0,0,0,0.4)';
+  ctx.fillText(title,W/2-ctx.measureText(title).width/2+2,36);
+  ctx.fillStyle='#fff';
+  ctx.fillText(title,W/2-ctx.measureText(title).width/2,34);
+  ctx.font='12px "Courier Prime",monospace'; ctx.fillStyle='rgba(210,210,210,0.8)';
+  const sub='U.S. Federal Reserve Economic Data  •  FRED API  •  Weekly Playback';
+  ctx.fillText(sub,W/2-ctx.measureText(sub).width/2,54);
 }
 
-function drawLegend(ctx) {
-  const items = [
-    [[180,220,255], 'Sky color = Storm severity'],
-    [[160,160,200], 'Clouds = Fed Rate pressure'],
-    [[100,120,160], 'Rain = Rate hike events'],
-    [[200,200,80],  'Wind = Unemployment'],
-    [[255,220,80],  'Sun = GDP growth'],
+function drawLegend(ctx){
+  const items=[
+    [[180,220,255],'Sky = Storm severity'],
+    [[160,160,200],'Clouds = Fed Rate'],
+    [[100,120,160],'Rain = Rate hike weeks'],
+    [[200,200,80], 'Wind = Unemployment'],
+    [[255,220,80], 'Sun = GDP growth'],
   ];
-  const lx = 10, ly = SCENE_H - 118;
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  roundRect(ctx, lx-5, ly-5, 245, items.length*22+12, 6);
-  ctx.font = '12px "Courier Prime", monospace';
-  items.forEach(([[r,g,b], text], i) => {
-    ctx.beginPath();
-    ctx.fillStyle = `rgb(${r},${g},${b})`;
-    ctx.arc(lx+7, ly+i*22+8, 5, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#eee';
-    ctx.fillText(text, lx+18, ly+i*22+13);
+  const lx=10,ly=SCENE_H-118;
+  ctx.fillStyle='rgba(0,0,0,0.45)'; rrect(ctx,lx-5,ly-5,230,items.length*22+12,6);
+  ctx.font='12px "Courier Prime",monospace';
+  items.forEach(([[r,g,b],text],i)=>{
+    ctx.beginPath(); ctx.fillStyle=`rgb(${r},${g},${b})`; ctx.arc(lx+7,ly+i*22+8,5,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#ddd'; ctx.fillText(text,lx+18,ly+i*22+13);
   });
 }
 
-function drawScrubber(ctx, state) {
-  const { currentWeek, totalWeeks, weeks, paused, dragging } = state;
-  const sy = SCENE_H;
-  ctx.fillStyle = '#1e1e2d';
-  ctx.fillRect(0, sy, W, SCRUB_H);
-  ctx.strokeStyle = '#3c3c50';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
+function drawScrubber(ctx,state){
+  const {currentWeek,totalWeeks,weeks,paused,dragging,year}=state;
+  const sy=SCENE_H;
+  ctx.fillStyle='#1a1a2a'; ctx.fillRect(0,sy,W,SCRUB_H);
+  ctx.strokeStyle='#2e2e44'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,sy); ctx.lineTo(W,sy); ctx.stroke();
 
-  const pad = 40, tx = pad, tw = W - pad*2, ty = sy + 32;
-
-  // track bg
-  ctx.fillStyle = '#3c3c5a';
-  roundRect(ctx, tx, ty-3, tw, 6, 3);
-
-  // fill
-  const prog = currentWeek / Math.max(1, totalWeeks - 1);
-  ctx.fillStyle = '#50c8ff';
-  roundRect(ctx, tx, ty-3, Math.round(tw*prog), 6, 3);
+  const pad=40,tw=W-pad*2,ty=sy+32;
+  ctx.fillStyle='#2e2e4a'; rrect(ctx,pad,ty-3,tw,6,3);
+  const prog=currentWeek/Math.max(1,totalWeeks-1);
+  ctx.fillStyle='#50c8ff'; rrect(ctx,pad,ty-3,Math.round(tw*prog),6,3);
 
   // month markers
-  const months = {};
-  weeks.forEach((w, i) => {
-    const m = w.toLocaleString('en', {month:'short'});
-    if (!(m in months)) months[m] = i;
-  });
-  ctx.font = '11px "Courier Prime", monospace';
-  ctx.fillStyle = '#778';
-  Object.entries(months).forEach(([m, idx]) => {
-    const mx = tx + Math.round(tw * idx / Math.max(1, totalWeeks-1));
-    ctx.beginPath(); ctx.strokeStyle = '#505070'; ctx.lineWidth=1;
-    ctx.moveTo(mx, ty+6); ctx.lineTo(mx, ty+12); ctx.stroke();
-    ctx.fillText(m, mx - ctx.measureText(m).width/2, ty+22);
+  const months={};
+  weeks.forEach((w,i)=>{ const m=w.toLocaleString('en',{month:'short'}); if(!(m in months)) months[m]=i; });
+  ctx.font='11px "Courier Prime",monospace'; ctx.fillStyle='#556';
+  Object.entries(months).forEach(([m,idx])=>{
+    const mx=pad+Math.round(tw*idx/Math.max(1,totalWeeks-1));
+    ctx.beginPath(); ctx.strokeStyle='#383858'; ctx.lineWidth=1; ctx.moveTo(mx,ty+6); ctx.lineTo(mx,ty+12); ctx.stroke();
+    ctx.fillText(m,mx-ctx.measureText(m).width/2,ty+22);
   });
 
   // thumb
-  const thumbX = tx + Math.round(tw * prog);
-  ctx.beginPath();
-  ctx.fillStyle = dragging ? '#fff' : '#50c8ff';
-  ctx.arc(thumbX, ty, 9, 0, Math.PI*2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.fillStyle = '#1e1e2d';
-  ctx.arc(thumbX, ty, 5, 0, Math.PI*2);
-  ctx.fill();
+  const tx2=pad+Math.round(tw*prog);
+  ctx.beginPath(); ctx.fillStyle=dragging?'#fff':'#50c8ff'; ctx.arc(tx2,ty,9,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.fillStyle='#1a1a2a'; ctx.arc(tx2,ty,5,0,Math.PI*2); ctx.fill();
 
   // date
-  if (currentWeek < weeks.length) {
-    const d = weeks[currentWeek];
-    const ds = d.toLocaleString('en', {month:'short', day:'2-digit', year:'numeric'});
-    ctx.font = '13px "Courier Prime", monospace';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(ds, W/2 - ctx.measureText(ds).width/2, sy+14);
+  if(currentWeek<weeks.length){
+    const ds=weeks[currentWeek].toLocaleString('en',{month:'short',day:'2-digit',year:'numeric'});
+    ctx.font='13px "Courier Prime",monospace'; ctx.fillStyle='#ccc';
+    ctx.fillText(ds,W/2-ctx.measureText(ds).width/2,sy+14);
   }
-
-  // status
-  ctx.font = '11px "Courier Prime", monospace';
-  ctx.fillStyle = '#556';
-  ctx.fillText(paused ? '⏸ PAUSED' : '▶ PLAYING', 8, sy+14);
+  ctx.font='11px "Courier Prime",monospace'; ctx.fillStyle='#445';
+  ctx.fillText(paused?'⏸ PAUSED':'▶ PLAYING',8,sy+14);
 }
 
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x+r, y);
-  ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
-  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
-  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
-  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
-  ctx.closePath();
-  ctx.fill();
-}
+// ── ENGINE ────────────────────────────────────────────────────────────────────
+const canvas  = document.getElementById('c');
+const ctx     = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const goBtn   = document.getElementById('goBtn');
+const yearIn  = document.getElementById('yearInput');
+const yearMsg = document.getElementById('yearMsg');
+const errMsg  = document.getElementById('errMsg');
 
-// ── MAIN ──────────────────────────────────────────────────────────────────────
-async function main() {
-  const canvas = document.getElementById('c');
-  const ctx = canvas.getContext('2d');
-  const loading = document.getElementById('loading');
+let animId = null;
+const SUN_CX=W-120, SUN_CY=90;
 
-  // fetch data
-  let inflMap, rateMap, unemMap, gdpMap;
+async function startYear(year) {
+  if(animId){ cancelAnimationFrame(animId); animId=null; }
+
+  // show loading
+  overlay.style.display='flex'; overlay.style.opacity='1';
+  overlay.querySelector('h2').textContent=`FED WEATHER ${year}`;
+  overlay.querySelector('p').textContent='Fetching FRED data…';
+  errMsg.style.display='none';
+  goBtn.disabled=true; yearMsg.textContent=`Loading ${year}…`;
+
+  let inflMap,rateMap,unemMap,gdpMap;
   try {
-    [inflMap, rateMap, unemMap, gdpMap] = await Promise.all([
-      fetchSeries('CPIAUCSL'),
-      fetchSeries('FEDFUNDS'),
-      fetchSeries('UNRATE'),
-      fetchSeries('A191RL1Q225SBEA'),
+    [inflMap,rateMap,unemMap,gdpMap] = await Promise.all([
+      fetchSeries('CPIAUCSL',  year),
+      fetchSeries('FEDFUNDS',  year),
+      fetchSeries('UNRATE',    year),
+      fetchSeries('A191RL1Q225SBEA', year),
     ]);
   } catch(e) {
-    loading.querySelector('p').textContent = 'Failed to load FRED data. Check console.';
-    console.error(e);
+    errMsg.textContent = `Error: ${e.message} — try from GitHub Pages or a web server`;
+    errMsg.style.display='block';
+    overlay.querySelector('p').textContent='';
+    goBtn.disabled=false; yearMsg.textContent='';
     return;
   }
 
-  // build weekly arrays
-  const inflVals = buildYoYCPI(inflMap);
-  const rateVals = buildWeekly(rateMap);
-  const unemVals = buildWeekly(unemMap);
-  const gdpVals  = buildWeekly(gdpMap);
+  const weeks    = buildWeeks(year);
+  const inflVals = buildYoYCPI(inflMap, weeks);
+  const rateVals = forwardFill(rateMap, weeks);
+  const unemVals = forwardFill(unemMap, weeks);
+  const gdpVals  = forwardFill(gdpMap,  weeks);
 
-  const inflNorm = normalize(inflVals, 5.0, 9.5);
-  const rateNorm = normalize(rateVals, 0.0, 4.5);
-  const unemNorm = normalize(unemVals, 3.4, 4.2);
-  const gdpNorm  = normalize(gdpVals, -2.0, 7.0);
+  const inflNorm = normalize(inflVals, Math.min(...inflVals)-0.5, Math.max(...inflVals)+0.5);
+  const rateNorm = normalize(rateVals, 0, Math.max(...rateVals,0.5));
+  const unemNorm = normalize(unemVals, Math.min(...unemVals)-0.2, Math.max(...unemVals)+0.2);
+  const gdpNorm  = normalize(gdpVals,  Math.min(...gdpVals)-1,   Math.max(...gdpVals)+1);
 
-  const totalWeeks = inflVals.length;
-  const weeks = [];
-  let d = new Date('2022-01-01');
-  for (let i = 0; i < totalWeeks; i++) {
-    weeks.push(new Date(d));
-    d.setDate(d.getDate() + 7);
-  }
+  const hikeWeeks = HIKE_WEEKS[year] ?? new Set();
+  const totalWeeks = weeks.length;
 
-  // init scene objects
-  const clouds = Array.from({length:14}, () => new Cloud(
-    rnd(0, W), rnd(30, SCENE_H/2), rnd(0.6, 1.4), 0
-  ));
-  const sunRays = Array.from({length:16}, (_, i) =>
-    new SunRay(i * Math.PI/8, rnd(60, 100))
-  );
-  const SUN_CX = W - 120, SUN_CY = 90;
+  // scene objects
+  const clouds  = Array.from({length:14},()=>new Cloud(rnd(0,W),rnd(30,SCENE_H/2),rnd(0.6,1.4),0));
+  const sunRays = Array.from({length:16},(_,i)=>new SunRay(i*Math.PI/8,rnd(60,100)));
+  let rain=[], wind=[], bolts=[], ltTimer=0;
 
-  let rainDrops = [], windParticles = [], lightnings = [];
-  let lightningTimer = 0;
+  const state = { currentWeek:0, totalWeeks, weeks, paused:false, dragging:false, year };
 
-  // state
-  const state = {
-    currentWeek: 0,
-    totalWeeks,
-    weeks,
-    paused: false,
-    dragging: false,
+  // scrubber mouse
+  const PAD=40, TW=W-PAD*2;
+  function scrubX(mx){ return Math.max(0,Math.min(totalWeeks-1,Math.round((mx-PAD)/TW*(totalWeeks-1)))); }
+
+  canvas.onmousedown = e => {
+    const rect=canvas.getBoundingClientRect(), sx=W/rect.width;
+    const mx=(e.clientX-rect.left)*sx, my=(e.clientY-rect.top)*sx;
+    if(my>=SCENE_H){
+      const tx=PAD+Math.round(TW*state.currentWeek/Math.max(1,totalWeeks-1));
+      if(Math.abs(mx-tx)<22) state.dragging=true;
+    }
+  };
+  canvas.onmouseup   = ()=>state.dragging=false;
+  canvas.onmousemove = e => {
+    if(!state.dragging) return;
+    const rect=canvas.getBoundingClientRect(), sx=W/rect.width;
+    state.currentWeek=scrubX((e.clientX-rect.left)*sx);
+  };
+  canvas.ontouchstart = e => {
+    e.preventDefault();
+    const rect=canvas.getBoundingClientRect(), sx=W/rect.width;
+    const t=e.touches[0];
+    const mx=(t.clientX-rect.left)*sx, my=(t.clientY-rect.top)*sx;
+    if(my>=SCENE_H){
+      const tx=PAD+Math.round(TW*state.currentWeek/Math.max(1,totalWeeks-1));
+      if(Math.abs(mx-tx)<26) state.dragging=true;
+    }
+  };
+  canvas.ontouchend  = ()=>state.dragging=false;
+  canvas.ontouchmove = e => {
+    if(!state.dragging) return; e.preventDefault();
+    const rect=canvas.getBoundingClientRect(), sx=W/rect.width;
+    state.currentWeek=scrubX((e.touches[0].clientX-rect.left)*sx);
   };
 
-  // scrubber interaction
-  const PAD = 40, TRACK_W = W - PAD*2, TRACK_Y = SCENE_H + 32;
+  document.onkeydown = e => {
+    if(e.code==='Space'){e.preventDefault(); state.paused=!state.paused;}
+    if(e.code==='KeyR') {state.currentWeek=0; state.paused=false; frameAcc=0;}
+  };
 
-  canvas.addEventListener('mousedown', e => {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = W / rect.width;
-    const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top) * scaleX;
-    if (my >= SCENE_H) {
-      const prog = state.currentWeek / Math.max(1, totalWeeks-1);
-      const thumbX = PAD + Math.round(TRACK_W * prog);
-      if (Math.abs(mx - thumbX) < 20) state.dragging = true;
-    }
-  });
-  canvas.addEventListener('mouseup', () => state.dragging = false);
-  canvas.addEventListener('mousemove', e => {
-    if (!state.dragging) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = W / rect.width;
-    const mx = (e.clientX - rect.left) * scaleX;
-    const rel = (mx - PAD) / TRACK_W;
-    state.currentWeek = Math.max(0, Math.min(totalWeeks-1, Math.round(rel * (totalWeeks-1))));
-  });
+  // hide overlay
+  overlay.style.opacity='0';
+  setTimeout(()=>overlay.style.display='none',400);
+  goBtn.disabled=false; yearMsg.textContent=`Showing ${year}`;
 
-  // touch support
-  canvas.addEventListener('touchstart', e => {
-    e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = W / rect.width;
-    const touch = e.touches[0];
-    const mx = (touch.clientX - rect.left) * scaleX;
-    const my = (touch.clientY - rect.top) * scaleX;
-    if (my >= SCENE_H) {
-      const prog = state.currentWeek / Math.max(1, totalWeeks-1);
-      const thumbX = PAD + Math.round(TRACK_W * prog);
-      if (Math.abs(mx - thumbX) < 24) state.dragging = true;
-    }
-  }, {passive:false});
-  canvas.addEventListener('touchend', () => state.dragging = false);
-  canvas.addEventListener('touchmove', e => {
-    if (!state.dragging) return;
-    e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = W / rect.width;
-    const mx = (e.touches[0].clientX - rect.left) * scaleX;
-    const rel = (mx - PAD) / TRACK_W;
-    state.currentWeek = Math.max(0, Math.min(totalWeeks-1, Math.round(rel*(totalWeeks-1))));
-  }, {passive:false});
+  let last=null, frameAcc=0;
 
-  document.addEventListener('keydown', e => {
-    if (e.code === 'Space') { e.preventDefault(); state.paused = !state.paused; }
-    if (e.code === 'KeyR')  { state.currentWeek = 0; state.paused = false; frameAcc = 0; }
-  });
+  function frame(ts){
+    animId=requestAnimationFrame(frame);
+    const dt=last?Math.min((ts-last)/1000,0.1):0.016; last=ts;
+    const t=ts/1000;
 
-  loading.style.display = 'none';
-
-  let last = null, frameAcc = 0;
-
-  function frame(ts) {
-    const dt = last ? Math.min((ts - last) / 1000, 0.1) : 0.016;
-    last = ts;
-    const t = ts / 1000;
-
-    if (!state.paused && !state.dragging) {
-      frameAcc += dt; // 1 week per second
-      if (frameAcc >= 1.0) {
-        state.currentWeek = Math.min(state.currentWeek + Math.floor(frameAcc), totalWeeks - 1);
-        frameAcc %= 1.0;
-      }
-      if (state.currentWeek >= totalWeeks - 1) state.paused = true;
+    if(!state.paused&&!state.dragging){
+      frameAcc+=dt;
+      if(frameAcc>=1.0){ state.currentWeek=Math.min(state.currentWeek+Math.floor(frameAcc),totalWeeks-1); frameAcc%=1; }
+      if(state.currentWeek>=totalWeeks-1) state.paused=true;
     }
 
-    const w = state.currentWeek;
-    const iN = inflNorm[w], rN = rateNorm[w], uN = unemNorm[w], gN = gdpNorm[w];
-    const iV = inflVals[w], rV = rateVals[w];
-    const cloudDark = rN * 0.85;
-    const rainInt   = rN * 0.9;
-    const windSpd   = uN;
-    const isHike    = HIKE_WEEKS.has(w);
+    const w=state.currentWeek;
+    const iN=inflNorm[w],rN=rateNorm[w],uN=unemNorm[w],gN=gdpNorm[w];
+    const iV=inflVals[w],rV=rateVals[w];
+    const cloudDark=rN*0.85, rainInt=rN*0.9, windSpd=uN;
+    const isHike=hikeWeeks.has(w);
 
-    // update clouds
-    clouds.forEach(c => { c.darkness = cloudDark; c.update(windSpd * 3); });
+    clouds.forEach(c=>{ c.darkness=cloudDark; c.update(windSpd*3); });
 
-    // rain
-    const maxDrops = Math.min(isHike ? 140 : 80, Math.round(rainInt * 80) + (isHike ? 40 : 0));
-    while (rainDrops.length < maxDrops) rainDrops.push(new RainDrop(rainInt, cloudDark));
-    rainDrops = rainDrops.filter(d => d.update(windSpd * 4));
+    const maxDrops=Math.round(rainInt*80)+(isHike?40:0);
+    while(rain.length<Math.min(maxDrops,140)) rain.push(new RainDrop(rainInt,cloudDark));
+    rain=rain.filter(d=>d.update(windSpd*4));
 
-    // wind
-    const maxWind = Math.round(uN * 60);
-    while (windParticles.length < maxWind) windParticles.push(new WindParticle(uN));
-    windParticles = windParticles.filter(p => p.update());
+    const maxWind=Math.round(uN*60);
+    while(wind.length<maxWind) wind.push(new WindParticle(uN));
+    wind=wind.filter(p=>p.update());
 
-    // lightning
-    if (cloudDark > 0.4) {
-      lightningTimer -= dt;
-      const interval = Math.max(0.4, 3.0 - cloudDark * 4.0) * (isHike ? 0.4 : 1.0);
-      if (lightningTimer <= 0) {
-        lightnings.push(new Lightning());
-        if (cloudDark > 0.7) lightnings.push(new Lightning());
-        lightningTimer = interval + rnd(-0.2, 0.4);
+    if(cloudDark>0.4){
+      ltTimer-=dt;
+      const interval=Math.max(0.4,3-cloudDark*4)*(isHike?0.4:1);
+      if(ltTimer<=0){
+        bolts.push(new Lightning());
+        if(cloudDark>0.7) bolts.push(new Lightning());
+        ltTimer=interval+rnd(-0.2,0.4);
       }
     }
-    lightnings = lightnings.filter(l => l.update());
+    bolts=bolts.filter(l=>l.update());
 
-    // ── DRAW ─────────────────────────────────────────────────────────────────
-    drawSky(ctx, cloudDark, gN);
-    drawGround(ctx, iN);
+    // ── draw ──
+    drawSky(ctx,cloudDark,gN);
+    drawGround(ctx,iN);
 
     // sun
-    const sunVis = Math.max(0, Math.min(1, (1.0 - cloudDark * 1.4) + gN * 0.3));
-    if (sunVis > 0.05) {
-      const peek = Math.round((1.0 - sunVis) * 80);
-      const sx = SUN_CX + peek, sy = SUN_CY - peek/2;
-      const outerR = Math.max(5, Math.round((38 + gN * 10) * sunVis));
-      const innerR = Math.max(3, Math.round((28 + gN * 8) * sunVis));
-      // halo
-      const haloGrad = ctx.createRadialGradient(sx, sy, innerR, sx, sy, outerR + 30);
-      haloGrad.addColorStop(0, `rgba(255,240,100,${0.3 * sunVis})`);
-      haloGrad.addColorStop(1, 'rgba(255,240,100,0)');
-      ctx.fillStyle = haloGrad;
-      ctx.beginPath();
-      ctx.arc(sx, sy, outerR + 30, 0, Math.PI*2);
-      ctx.fill();
-      // sun body
-      ctx.beginPath(); ctx.fillStyle = '#ffd840';
-      ctx.arc(sx, sy, outerR, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.fillStyle = '#fff8b0';
-      ctx.arc(sx, sy, innerR, 0, Math.PI*2); ctx.fill();
-      // rays
-      const rayAlpha = sunVis * 0.75;
-      sunRays.forEach(ray => ray.draw(ctx, sx, sy, t, rayAlpha));
+    const sunVis=Math.max(0,Math.min(1,(1-cloudDark*1.4)+gN*0.3));
+    if(sunVis>0.05){
+      const peek=Math.round((1-sunVis)*80);
+      const sx=SUN_CX+peek, sy2=SUN_CY-peek/2;
+      const outerR=Math.max(5,Math.round((38+gN*10)*sunVis));
+      const innerR=Math.max(3,Math.round((28+gN*8)*sunVis));
+      const hg=ctx.createRadialGradient(sx,sy2,innerR,sx,sy2,outerR+30);
+      hg.addColorStop(0,`rgba(255,240,100,${0.3*sunVis})`); hg.addColorStop(1,'rgba(255,240,100,0)');
+      ctx.fillStyle=hg; ctx.beginPath(); ctx.arc(sx,sy2,outerR+30,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.fillStyle='#ffd840'; ctx.arc(sx,sy2,outerR,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.fillStyle='#fff8b0'; ctx.arc(sx,sy2,innerR,0,Math.PI*2); ctx.fill();
+      sunRays.forEach(ray=>ray.draw(ctx,sx,sy2,t,sunVis*0.75));
     }
 
-    // clouds
-    clouds.forEach(c => c.draw(ctx));
+    clouds.forEach(c=>c.draw(ctx));
+    rain.forEach(d=>d.draw(ctx));
+    wind.forEach(p=>p.draw(ctx));
+    bolts.forEach(l=>l.draw(ctx));
 
-    // rain
-    rainDrops.forEach(d => d.draw(ctx));
-
-    // wind
-    windParticles.forEach(p => p.draw(ctx));
-
-    // lightning
-    lightnings.forEach(l => l.draw(ctx));
-
-    // hike label
-    if (isHike) {
-      ctx.font = 'bold 14px "Courier Prime", monospace';
-      ctx.fillStyle = 'rgba(255,255,180,0.9)';
-      const lbl = '⚡ FED RATE HIKE';
-      ctx.fillText(lbl, W/2 - ctx.measureText(lbl).width/2, 72);
+    if(isHike){
+      ctx.font='bold 14px "Courier Prime",monospace'; ctx.fillStyle='rgba(255,255,180,0.9)';
+      const hl='⚡ FED RATE HIKE';
+      ctx.fillText(hl,W/2-ctx.measureText(hl).width/2,72);
     }
 
-    // unemployment readout
-    ctx.font = '13px "Courier Prime", monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    const uLbl = `Unemployment: ${unemVals[w].toFixed(1)}%`;
-    ctx.fillText(uLbl, W/2 - ctx.measureText(uLbl).width/2, SCENE_H - 20);
+    ctx.font='13px "Courier Prime",monospace'; ctx.fillStyle='rgba(240,240,240,0.85)';
+    const ul=`Unemployment: ${unemVals[w].toFixed(1)}%`;
+    ctx.fillText(ul,W/2-ctx.measureText(ul).width/2,SCENE_H-20);
 
-    drawTitle(ctx);
-    drawThermometer(ctx, iN, iV);
-    drawPressureGauge(ctx, rN, rV);
+    drawTitle(ctx,year);
+    drawThermometer(ctx,iN,iV);
+    drawGauge(ctx,rN,rV);
     drawLegend(ctx);
-    drawScrubber(ctx, state);
-
-    requestAnimationFrame(frame);
+    drawScrubber(ctx,state);
   }
 
-  requestAnimationFrame(frame);
+  animId=requestAnimationFrame(frame);
 }
 
-main();
+// ── INIT ──────────────────────────────────────────────────────────────────────
+goBtn.addEventListener('click',()=>{
+  const y=parseInt(yearIn.value);
+  if(y<1960||y>2024){ yearMsg.textContent='Enter a year 1960–2024'; return; }
+  startYear(y);
+});
+yearIn.addEventListener('keydown',e=>{ if(e.key==='Enter') goBtn.click(); });
+
+// draw placeholder frame
+ctx.fillStyle='#0d0d1a'; ctx.fillRect(0,0,W,H);
 </script>
 </body>
 </html>
