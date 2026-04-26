@@ -162,12 +162,28 @@ async function fetchSeries(seriesId, year) {
   const end   = `${year}-12-31`;
   const fredUrl = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_KEY}` +
                   `&file_type=json&observation_start=${start}&observation_end=${end}`;
-  // Route through CORS proxy so it works from GitHub Pages
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fredUrl)}`;
-  const r = await fetch(proxyUrl);
-  if (!r.ok) throw new Error(`FRED ${seriesId}: HTTP ${r.status}`);
-  const wrapper = await r.json();
-  const data = JSON.parse(wrapper.contents);
+  // Try multiple CORS proxies in sequence
+  const proxies = [
+    u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+    u => `https://thingproxy.freeboard.io/fetch/${u}`,
+  ];
+  let data = null;
+  for (const makeProxy of proxies) {
+    try {
+      const r = await fetch(makeProxy(fredUrl));
+      if (!r.ok) continue;
+      const text = await r.text();
+      // allorigins wraps in {contents:...}, others return raw JSON
+      try {
+        const wrapper = JSON.parse(text);
+        data = wrapper.contents ? JSON.parse(wrapper.contents) : wrapper;
+      } catch { continue; }
+      if (data.observations) break;
+      data = null;
+    } catch { continue; }
+  }
+  if (!data) throw new Error(`FRED ${seriesId}: all proxies failed`);
   const out = {};
   for (const obs of data.observations || []) {
     if (obs.value !== '.') out[obs.date] = parseFloat(obs.value);
